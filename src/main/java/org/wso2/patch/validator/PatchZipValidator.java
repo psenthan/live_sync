@@ -28,20 +28,32 @@ public class PatchZipValidator implements CommonValidator {
     public String CheckReadMe(String filepath, String patchId) throws IOException {
         String errorMessage = "";
         File file = new File(filepath);
-        System.out.println("Reading files using Apache IO:");
         List<String> lines = FileUtils.readLines(file, "UTF-8");
 
         String[] line = lines.get(0).split("-");
-        if (!Objects.equals(patchId, line[1])) errorMessage = "'Patch ID' line in README.txt has an error\n";
+        if (!Objects.equals(patchId, line[4]) || Objects.equals(lines.get(0), "Patch ID         : patchId"))
+            errorMessage = "'Patch ID' line in the README.txt has an error\n";
 
-        line = lines.get(1).split(":");
-        if (line.length < 2) errorMessage = errorMessage + "'Applies To' line in line in README.txt has an error\n";
+        line = lines.get(1).split(": ");
+        if (line.length < 2 || Objects.equals(line[1], "productList"))
+            errorMessage = errorMessage + "'Applies To' line in the README.txt has an error\n";
 
-        line = lines.get(2).split(":");
-        if (line.length < 2) errorMessage = errorMessage + "'Associated JIRA' line in line in README.txt has an error\n";
+        line = lines.get(2).split(": ");
+        if (line.length < 2 ||  Objects.equals(line[1], "publicJIRA"))
+            errorMessage = errorMessage + "'Associated JIRA' line in the README.txt has an error\n";
 
-        for(int i=0; i< lines.size(); i++){
-
+        for(int i=3; i< lines.size(); i++){
+            if(lines.get(i).startsWith("DESCRIPTION")){
+                if(lines.get(i+1).startsWith("Patch description goes here"))
+                    errorMessage = errorMessage + "DESCRIPTION section in the README.txt is not in the correct format\n";
+                i++;
+            }
+            if(lines.get(i).startsWith("INSTALLATION INSTRUCTIONS")){
+                if(lines.get(i+1).startsWith("Copy the patchNumber to"))
+                    errorMessage = errorMessage + "INSTALLATION INSTRUCTIONS section " +
+                            "in the README.txt is not in the correct format\n";
+                i++;
+            }
         }
         return errorMessage;
     }

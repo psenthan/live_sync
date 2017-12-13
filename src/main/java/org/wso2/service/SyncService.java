@@ -3,6 +3,8 @@ package org.wso2.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.wso2.interfaces.CommonValidator;
+import org.wso2.patch.validator.PatchValidateFactory;
+import org.wso2.patch.validator.PatchValidateService;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
