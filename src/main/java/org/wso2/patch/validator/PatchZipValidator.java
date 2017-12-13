@@ -26,16 +26,7 @@ public class PatchZipValidator implements CommonValidator {
 
     @Override
     public String CheckReadMe(String filepath, String patchId) throws IOException {
-        String errorMessage = "";
-        File file = new File(filepath);
-        System.out.println("Reading files using Apache IO:");
-        List<String> lines = FileUtils.readLines(file, "UTF-8");
-        String[] id = lines.get(0).split(":");
-        if (!Objects.equals(patchId, id[1]))
-        for (int i = 0; i< lines.size(); i++) {
-            lines.get(0);
-        }
-        return null;
+
     }
 
     @Override
