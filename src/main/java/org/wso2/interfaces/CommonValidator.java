@@ -1,7 +1,6 @@
 package org.wso2.interfaces;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 
 public interface CommonValidator {
@@ -13,7 +12,11 @@ public interface CommonValidator {
 
     String CheckPatch(String filepath);
 
-    void UnZip(File zipFilepath, String destFilePath) throws IOException;
+    String UnZip(File zipFilepath, String destFilePath) throws IOException;
 
     String CheckContent(String filePath, String patchId) throws IOException;
+
+    void DownloadZipFile(String url, String version, String patchId, String destFilePath);
+
+    void CommitKeys(String url, String fileLocation);
 }

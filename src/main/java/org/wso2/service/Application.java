@@ -16,6 +16,8 @@
 
 package org.wso2.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.wso2.msf4j.MicroservicesRunner;
 
 /**
@@ -27,6 +29,8 @@ import org.wso2.msf4j.MicroservicesRunner;
 
 
 public class Application {
+
+    private static final Logger LOG = LoggerFactory.getLogger(Application.class);
     public static void main(String[] args) {
         new MicroservicesRunner().deploy(new SyncService()).start();
     }
