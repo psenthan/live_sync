@@ -1,5 +1,6 @@
 org/wso2/service/SyncService.class
 org/wso2/patch/validator/PatchValidateFactory.class
+org/wso2/patch/validator/PatchZipValidator$1.class
 org/wso2/service/Application.class
 org/wso2/patch/validator/ValidateFactory.class
 org/wso2/patch/validator/PatchValidateService.class

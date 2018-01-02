@@ -7,6 +7,7 @@ import org.tmatesoft.svn.core.SVNException;
 import org.tmatesoft.svn.core.SVNURL;
 import org.tmatesoft.svn.core.auth.ISVNAuthenticationManager;
 import org.tmatesoft.svn.core.internal.io.dav.DAVRepositoryFactory;
+import org.tmatesoft.svn.core.io.ISVNEditor;
 import org.tmatesoft.svn.core.io.SVNRepository;
 import org.tmatesoft.svn.core.io.SVNRepositoryFactory;
 import org.tmatesoft.svn.core.wc.SVNWCUtil;
@@ -20,24 +21,68 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Properties;
-import java.util.Scanner;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 import org.apache.commons.io.filefilter.HiddenFileFilter;
-import org.wso2.service.SyncService;
+
+import javax.mail.PasswordAuthentication;
 
 import static org.apache.commons.codec.digest.DigestUtils.md5Hex;
+import javax.mail.*;
+import javax.mail.internet.*;
 
 public class PatchZipValidator implements CommonValidator {
     private static final int BUFFER_SIZE = 4096;
     private static final Logger LOG = LoggerFactory.getLogger(CommonValidator.class);
     private Properties prop = new Properties();
-    private static String login = "";
+    private static String username = "";
     private static String password ="";
+    private static boolean securityPatch = true;
+
+    public static void setSecurityPatch(boolean state){
+        securityPatch = state;
+    }
+
+    private static void extractFile(ZipInputStream zipIn, String filePath) throws IOException {
+        BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(filePath));
+        byte[] bytesIn = new byte[BUFFER_SIZE];
+        int read;
+        while ((read = zipIn.read(bytesIn)) != -1) {
+            bos.write(bytesIn, 0, read);
+        }
+        bos.close();
+    }
+
+    private static boolean isDirEmpty(final File directory) throws IOException {
+        DirectoryStream<Path> dirStream = Files.newDirectoryStream(directory.toPath());
+        return !dirStream.iterator().hasNext();
+    }
+
+    private boolean SVNConnection(String svnURL, String svnUser, String svnPass){
+        DAVRepositoryFactory.setup();
+        String url=svnURL;
+        String name=svnUser;
+        String password=svnPass;
+        SVNRepository repository = null;
+        try {
+            repository = SVNRepositoryFactory.create(SVNURL.parseURIEncoded(url));
+            ISVNAuthenticationManager authManager = SVNWCUtil.createDefaultAuthenticationManager(name, password);
+            repository.setAuthenticationManager(authManager);
+            repository.testConnection();
+            System.out.println("Connection done..");
+            return true;
+        } catch (SVNException e){
+            System.out.println("Not connected");
+            e.printStackTrace();
+            return false;
+        }
+
+    }
 
     @Override
     public String CheckReadMe(String filePath, String patchId) throws IOException {
@@ -74,12 +119,14 @@ public class PatchZipValidator implements CommonValidator {
             errorMessage = errorMessage + "'Applies To' line in the README.txt has an error\n";
 
         line = lines.get(2).split(": ");
-        if (line.length < 2 ||  Objects.equals(line[1], "publicJIRA"))
+        if (line.length == 2 &&  Objects.equals(line[1], "publicJIRA"))
             errorMessage = errorMessage + "'Associated JIRA' line in the README.txt has an error\n";
+        else if (line.length == 1 && securityPatch == true)
+            LOG.info("This is identified as a Security patch");
 
         for(int i=3; i< lines.size(); i++){
             if(lines.get(i).startsWith("DESCRIPTION")){
-                if(lines.get(i+1).startsWith("Patch description goes here"))
+                if(lines.get(i+1).startsWith("Patch description goes here") || lines.get(i).isEmpty())
                     errorMessage = errorMessage + "DESCRIPTION section in the README.txt is not in the correct format\n";
                 i++;
             }
@@ -87,23 +134,23 @@ public class PatchZipValidator implements CommonValidator {
                 boolean jaggeryInstruction = false;
                 for(int j=i+1; j< lines.size(); j++){
                     if(jag &&
-                            lines.get(j).startsWith(
+                            lines.get(j).contains(
                                     " Merge and Replace resource/store to " +
                                             "<CARBON_SERVER>/repository/deployment/server/jaggeryapps/store") &&
-                            lines.get(j+1).startsWith(
+                            lines.get(j+1).contains(
                             " Merge and Replace resource/publisher to " +
                                     "<CARBON_SERVER>/repository/deployment/server/jaggeryapps/publisher")){
                         jaggeryInstruction = true;
-                        break;
 
                     }
-                    if(lines.get(j).startsWith("Copy the patchNumber to"))
+                    if(lines.get(j).contains("Copy the patchNumber to")){
                         errorMessage = errorMessage + "INSTALLATION INSTRUCTIONS section " +
-                                "in the README.txt is not in the correct format\n";
-                    if(lines.get(j).startsWith("Copy the patch")) {
-                        if(!lines.get(j).startsWith("Copy the patch" + patchId + " to"))
+                                "in the README.txt is not in the correct format: Check patchNumber\n";
+                    }
+                    else if(lines.get(j).contains("Copy the patch")) {
+                        if(!lines.get(j).contains("Copy the patch" + patchId + " to"))
                             errorMessage = errorMessage + "INSTALLATION INSTRUCTIONS section " +
-                                "in the README.txt is not in the correct format\n";
+                                "in the README.txt is not in the correct format: Check patchNumber\n";
                     }
                     i++;
                 }
@@ -167,10 +214,10 @@ public class PatchZipValidator implements CommonValidator {
     }
 
     @Override
-    public String UnZip(File zipFilePath, String destFilePath) throws IOException {
+    public void UnZip(File zipFilePath, String destFilePath) throws IOException {
 
         if (!zipFilePath.exists()) {
-            return "patch does not exist to unzip\n";
+            return;
         }
         File destDir = new File(destFilePath);
         if (!destDir.exists()) {
@@ -194,7 +241,6 @@ public class PatchZipValidator implements CommonValidator {
             zipEntry = zipInputStream.getNextEntry();
         }
         zipInputStream.close();
-        return "";
     }
 
     @Override
@@ -237,6 +283,7 @@ public class PatchZipValidator implements CommonValidator {
                 if(file.getName().endsWith(("~")))
                     errorMessage = errorMessage + "Unexpected file found" + file.getName() + "\n";
             }
+
             check = new File(filePath + "resources").exists();
             if(check){
                 check = new File(filePath + "resources/store").exists();
@@ -250,19 +297,15 @@ public class PatchZipValidator implements CommonValidator {
     }
 
     @Override
-    public void DownloadZipFile(String url, String version, String patchId, String destFilePath) {
+    public String DownloadZipFile(String url, String version, String patchId, String destFilePath) {
         File destinationDirectory = new File(destFilePath);
         if (!destinationDirectory.exists()) {
             destinationDirectory.mkdirs();
         }
+        username = prop.getProperty("username");
+        password = prop.getProperty("password");
 
-        Scanner in = new Scanner(System.in);
-        System.out.print("Enter username:  ");
-        login = in.nextLine();
-        System.out.print("Enter password:  ");
-        password = in.nextLine();
-
-        if(SVNConnection(url, login, password)) {
+        if(SVNConnection(url, username, password)) {
             final SvnOperationFactory svnOperationFactory = new SvnOperationFactory();
             try {
                 final SvnCheckout checkout = svnOperationFactory.createCheckout();
@@ -270,53 +313,66 @@ public class PatchZipValidator implements CommonValidator {
                 checkout.setSingleTarget(SvnTarget.fromFile(destinationDirectory));
                 checkout.run();
             } catch (SVNException e) {
-                e.printStackTrace();
+                return "Requested url not found: "+ url;
             }
         }
-
+        return "";
     }
 
     @Override
     public void CommitKeys(String url, String fileLocation) {
-        if(SVNConnection(url, login, password)) {
+        File file = new File(fileLocation);
+        username = prop.getProperty("username");
+        password = prop.getProperty("password");
+        if(SVNConnection(url, username, password)) {
             //todo: delete unzipped folder
-            //todo: add all the files
+            SVNRepository repository = null;
+            for (File f : file.listFiles()) {
+                try {
+                    repository = SVNRepositoryFactory.create( SVNURL.parseURIDecoded( url ) );
+                    ISVNEditor editor = repository.getCommitEditor(null,null, true,null);
+                    editor.addFile( fileLocation , null , -1 );
+                } catch (SVNException e) {
+                    e.printStackTrace();
+                }
+            }
+
         }
     }
 
-    private static void extractFile(ZipInputStream zipIn, String filePath) throws IOException {
-        BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(filePath));
-        byte[] bytesIn = new byte[BUFFER_SIZE];
-        int read;
-        while ((read = zipIn.read(bytesIn)) != -1) {
-            bos.write(bytesIn, 0, read);
+    @Override
+    public String SendEmail(String fromAddress, ArrayList<String> toList, ArrayList<String> ccList,
+                            String subject, String body, String logMessage) {
+        String from = fromAddress;
+
+        javax.mail.Session session = javax.mail.Session.getDefaultInstance(prop, new Authenticator() {
+            protected PasswordAuthentication getPasswordAuthentication() {
+                return new PasswordAuthentication(prop.getProperty("user"), prop.getProperty("emailPassword"));
+            }
+        });
+
+        try{
+            MimeMessage message = new MimeMessage(session);
+            message.setFrom(new InternetAddress(from));
+            for (int i = 0; i < toList.size(); i++) {
+                message.addRecipient(Message.RecipientType.TO,
+                        new InternetAddress(toList.get(i)));
+            }
+            for (int i = 0; i < ccList.size(); i++) {
+                message.addRecipient(Message.RecipientType.CC,
+                        new InternetAddress(ccList.get(i)));
+            }
+            message.setSubject(subject);
+            message.setContent(body, "text/html");
+            Transport transport = session.getTransport(prop.getProperty("protocol"));
+            transport.connect(prop.getProperty("host"), prop.getProperty("user"), prop.getProperty("emailPassword"));
+            Transport.send(message);
+            LOG.info("Email sent successfully");
+
+        }catch (MessagingException mex) {
+            mex.printStackTrace();
         }
-        bos.close();
+        return null;
     }
 
-    private static boolean isDirEmpty(final File directory) throws IOException {
-        DirectoryStream<Path> dirStream = Files.newDirectoryStream(directory.toPath());
-        return !dirStream.iterator().hasNext();
-    }
-
-    private boolean SVNConnection(String svnURL, String svnUser, String svnPass){
-        DAVRepositoryFactory.setup();
-        String url=svnURL;
-        String name=svnUser;
-        String password=svnPass;
-        SVNRepository repository = null;
-        try {
-            repository = SVNRepositoryFactory.create(SVNURL.parseURIEncoded(url));
-            ISVNAuthenticationManager authManager = SVNWCUtil.createDefaultAuthenticationManager(name, password);
-            repository.setAuthenticationManager(authManager);
-            repository.testConnection();
-            System.out.println("Connection done..");
-            return true;
-        } catch (SVNException e){
-            System.out.println("Not connected");
-            e.printStackTrace();
-            return false;
-        }
-
-    }
 }
