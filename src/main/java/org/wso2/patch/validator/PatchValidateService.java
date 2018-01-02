@@ -1,4 +1,4 @@
-package org.wso2.service;
+package org.wso2.patch.validator;
 
 
 public class PatchValidateService {
