@@ -43,6 +43,8 @@ public class PatchZipValidator implements CommonValidator {
     private static String username = "";
     private static String password ="";
     private static boolean securityPatch = true;
+    private static boolean isPatchEmpty = false;
+    private static boolean isResourcesFileEmpty = false;
 
     public static void setSecurityPatch(boolean state){
         securityPatch = state;
@@ -90,17 +92,19 @@ public class PatchZipValidator implements CommonValidator {
         Boolean jar = false;
         Boolean war = false;
         Boolean jag = false;
-        File dir = new File(filePath);
+        /*File dir = new File(filePath + "resources");
         if (!dir.exists()) {
             for (File file : dir.listFiles()) {
-                if(file.getName().endsWith((".jar")))
-                    jar = true;
-                if(file.getName().endsWith((".war")))
-                    war = true;
+                if(file.getName().endsWith("resources")){
+                    if(file.getName().endsWith((".jar")))
+                        jar = true;
+                    if(file.getName().endsWith((".war")))
+                        war = true;
+                }
                 if(file.getName().endsWith((".jag")))
                     jag = true;
             }
-        }
+        }*/
 
         String filepath = filePath + "README.txt";
         File file = new File(filepath);
@@ -166,6 +170,7 @@ public class PatchZipValidator implements CommonValidator {
     public String CheckLicense(String filepath) throws IOException {
         prop.load(PatchZipValidator.class.getClassLoader().getResourceAsStream("application.properties"));
         final String license = prop.getProperty("license");
+        LOG.info(filepath);
 
         File file = new File(filepath);
         if (!file.exists()) {
@@ -198,15 +203,12 @@ public class PatchZipValidator implements CommonValidator {
     public String CheckPatch(String filepath) {
         File file = new File(filepath);
         if (!file.exists()) {
+            isPatchEmpty = false;
             return "patchxxxx file does not exist\n";
         }
         try {
-            boolean empty = isDirEmpty(new File(filepath));
-            if(empty){
-                if(Files.list(Paths.get(filepath)).count() > 4) return "";
-                else return "No patch found\n";
-            }
-            else return "";
+            isPatchEmpty = isDirEmpty(new File(filepath));
+            return "";
         } catch (IOException e) {
             e.printStackTrace();
             return "filepath error when checking the patch folder content\n";
@@ -249,29 +251,28 @@ public class PatchZipValidator implements CommonValidator {
 
         File destDir = new File(filePath);
         if (!destDir.exists()) {
-            return "patch"+ patchId + " content does not exist\n";
-        }
-        else {
+            return "patch" + patchId + " content does not exist\n";
+        } else {
             boolean check = new File(filePath + "LICENSE.txt").exists();
-            if(!check) errorMessage = errorMessage + "LICENSE.txt does not exist\n";
+            if (!check) errorMessage = errorMessage + "LICENSE.txt does not exist\n";
 
             check = new File(filePath + "README.txt").exists();
-            if(!check) errorMessage = errorMessage + "README.txt does not exist\n";
+            if (!check) errorMessage = errorMessage + "README.txt does not exist\n";
 
             check = new File(filePath + "NOT_A_CONTRIBUTION.txt").exists();
-            if(!check) errorMessage = errorMessage + "NOT_A_CONTRIBUTION.txt does not exist\n";
+            if (!check) errorMessage = errorMessage + "NOT_A_CONTRIBUTION.txt does not exist\n";
 
             check = new File(filePath + "patch" + patchId).exists();
-            if(!check) errorMessage = errorMessage + "patch folder does not exist\n";
+            if (!check) errorMessage = errorMessage + "patch folder does not exist\n";
 
             check = new File(filePath + "wso2carbon-version.txt").exists();
-            if(check) errorMessage = errorMessage + "Unexpected file found: wso2carbon-version.txt\n";
+            if (check) errorMessage = errorMessage + "Unexpected file found: wso2carbon-version.txt\n";
 
-            String[] extensions = new String[] { "tmp", "swp", "DS_Dstore", "_MAX_OS" };
+            String[] extensions = new String[]{"tmp", "swp", "DS_Dstore", "_MAX_OS"};
             List<File> files = (List<File>) FileUtils.listFiles(destDir, extensions, true);
 
-            if(files.size() > 0)
-                errorMessage = errorMessage + "Unexpected file found: check for temporary, hidden, etc files";
+            if (files.size() > 0)
+                errorMessage = errorMessage + "Unexpected file found: check for temporary, hidden, etc.\n";
 
             File[] hiddenFiles = destDir.listFiles((FileFilter) HiddenFileFilter.HIDDEN);
             assert hiddenFiles != null;
@@ -280,17 +281,22 @@ public class PatchZipValidator implements CommonValidator {
 
             }
             for (File file : destDir.listFiles()) {
-                if(file.getName().endsWith(("~")))
+                if (file.getName().endsWith(("~")))
                     errorMessage = errorMessage + "Unexpected file found" + file.getName() + "\n";
             }
 
             check = new File(filePath + "resources").exists();
-            if(check){
-                check = new File(filePath + "resources/store").exists();
+            if (check) {
+                File resourcesFile = new File(filePath + "resources");
+                isResourcesFileEmpty = isDirEmpty(resourcesFile);
+                /*check = new File(filePath + "resources/store").exists();
                 if(!check) errorMessage = errorMessage + "inside the resources, store folder does not exist\n";
 
                 check = new File(filePath + "resources/publisher").exists();
-                if(!check) errorMessage = errorMessage + "inside the resources, publisher folder does not exist\n";
+                if(!check) errorMessage = errorMessage + "inside the resources, publisher folder does not exist\n";*/
+            }
+            if (isResourcesFileEmpty && isPatchEmpty) {
+                errorMessage = errorMessage + "Both resources and patch" + patchId + " folders are empty\n";
             }
             return errorMessage;
         }
