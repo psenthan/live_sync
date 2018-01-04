@@ -1,10 +1,16 @@
 package org.wso2.service;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.message.BasicHeader;
+import org.apache.http.params.HttpConnectionParams;
+import org.apache.http.protocol.HTTP;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,7 +23,6 @@ import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.sql.Timestamp;
 import java.util.*;
 
@@ -40,7 +45,7 @@ public class SyncService {
         final String staticURL = prop.getProperty("staticURL");
         final String url = staticURL + version + "/patches/patch" + patchId + "/";
         String errorMessage = "";
-        String timeStamp = String.valueOf(timestamp.getTime());
+        String timeStamp = String.valueOf(timestamp.getTime());//"1514971226429";//
 
         version = prop.getProperty(version);
 
@@ -65,6 +70,8 @@ public class SyncService {
         for (File file : fl.listFiles()) {
             if(file.getName().endsWith(".md5") || file.getName().endsWith((".asc"))
                     || file.getName().endsWith((".sha1"))) {
+                //todo: sendRequest()
+                // ("WSO2-CARBON-PATCH-4.0.0-0591","ReleasedNotInPublicSVN",true,"Promote");
                 errorMessage = "patch" + patchId + " is already signed\n";
                 FileUtils.deleteDirectory(new File(destFilePath));
                 LOG.info(errorMessage + "\n");
@@ -73,8 +80,13 @@ public class SyncService {
         }
 
         try {
+            LOG.info(filepath);
+            LOG.info(destination);
+            LOG.info(unzippedFolderPath);
+
             commonValidator.UnZip(new File(filepath), destination);
             errorMessage = commonValidator.CheckContent(unzippedFolderPath, patchId);
+
             errorMessage = errorMessage + commonValidator.CheckLicense(unzippedFolderPath + "LICENSE.txt");
             errorMessage = errorMessage + commonValidator.CheckNotAContribution(unzippedFolderPath +
                     "NOT_A_CONTRIBUTION.txt");
@@ -108,6 +120,7 @@ public class SyncService {
         String successState;
         if(isSuccess) successState = "true";
         else successState = "false";
+
         JSONObject json = new JSONObject();
         json.put("patchName", patchName);
         json.put("state", state);
@@ -118,8 +131,9 @@ public class SyncService {
 
         try {
             HttpPost request = new HttpPost(prop.getProperty("httpUri"));
+            LOG.info(String.valueOf(request));
             StringEntity params = new StringEntity(json.toString());
-            request.addHeader("content-type", prop.getProperty("content-type"));
+            params.setContentType(new BasicHeader(HTTP.CONTENT_TYPE, prop.getProperty("content-type")));
             request.addHeader("Authentication", prop.getProperty("Authentication"));
             request.addHeader("Cache-Control", prop.getProperty("Cache-Control"));
             request.setEntity(params);
